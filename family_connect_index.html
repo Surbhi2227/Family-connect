@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#174c45">
+<title>Family Connect</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#172522;background:#eef3f1}
+*{box-sizing:border-box}body{margin:0}header{background:#174c45;color:#fff;padding:18px 16px;display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:20px;margin:0}header small{opacity:.8}.wrap{max-width:760px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:16px;padding:18px;margin:12px 0;box-shadow:0 2px 12px #183d3510}
+h2{font-size:19px;margin:0 0 12px}label{display:block;font-size:13px;font-weight:650;margin:12px 0 5px}
+input,button{font:inherit}input{width:100%;padding:13px;border:1px solid #cbd8d3;border-radius:10px;background:#fff}
+button{border:0;border-radius:10px;padding:12px 15px;background:#176b5c;color:white;font-weight:650;cursor:pointer}
+button.secondary{background:#e6efec;color:#174c45}button.danger{background:#9b3030}
+.row{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.row>*{flex:1}
+.muted{color:#64736e;font-size:13px}.hidden{display:none!important}.status{padding:12px;border-radius:10px;background:#edf5f1;margin:10px 0;font-size:14px}
+.user{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #edf0ee}
+.user:last-child{border:0}.user small{display:block;color:#687770}.pill{font-size:11px;background:#edf5f1;padding:4px 8px;border-radius:20px}
+#messages{height:48vh;min-height:260px;overflow:auto;background:#f5f8f6;border-radius:12px;padding:10px}
+.msg{background:#fff;padding:9px 11px;border-radius:12px;margin:7px 0;max-width:90%;overflow-wrap:anywhere}
+.msg.mine{margin-left:auto;background:#d9f2e5}.msg small{display:block;color:#64736e;font-size:11px;margin-bottom:3px}
+#notice{position:sticky;top:0;z-index:3}
+footer{text-align:center;color:#718079;font-size:12px;padding:20px}
+</style>
+</head>
+<body>
+<header><div><h1>Family Connect</h1><small>Private family space</small></div><button id="logoutBtn" class="secondary hidden">Log out</button></header>
+<div class="wrap">
+<div id="notice" class="status hidden" role="status"></div>
+
+<section id="authView">
+<div class="card">
+<h2>Welcome back</h2>
+<label for="email">Email</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+<label for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Password">
+<div class="row"><button id="loginBtn">Log in</button><button id="showRegister" class="secondary">Create account</button></div>
+</div>
+<div id="registerBox" class="card hidden">
+<h2>Family member registration</h2>
+<p class="muted">New accounts remain pending until the family administrator approves them.</p>
+<label for="fullName">Your name</label><input id="fullName" autocomplete="name" placeholder="Full name">
+<label for="regEmail">Email</label><input id="regEmail" type="email" autocomplete="email" placeholder="you@example.com">
+<label for="regPassword">Create password</label><input id="regPassword" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+<button id="registerBtn" style="width:100%;margin-top:14px">Register</button>
+</div>
+</section>
+
+<section id="pendingView" class="hidden">
+<div class="card"><h2>Waiting for approval</h2><p>Your account has been created. The Family Connect administrator must approve it before you can view family members or messages.</p><p class="muted" id="pendingEmail"></p><button id="pendingRefresh" class="secondary">Check approval</button></div>
+</section>
+
+<section id="appView" class="hidden">
+<div class="card"><h2 id="hello">Family chat</h2><p class="muted">Messages are visible to approved Family Connect members.</p>
+<div id="messages" aria-live="polite"></div>
+<form id="sendForm" class="row"><input id="messageInput" maxlength="2000" placeholder="Write a message…" autocomplete="off" required><button type="submit">Send</button></form>
+</div>
+<div id="adminPanel" class="card hidden"><h2>Administrator · Member approvals</h2><p class="muted">Only the designated administrator can approve accounts.</p><div id="memberList">Loading members…</div></div>
+</section>
+</div>
+<footer>Family Connect · Private family use</footer>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDkGi21wce1cmXxccIB1MjzQ3DofQ6HLc",
+  authDomain: "family-connect-f83f8.firebaseapp.com",
+  projectId: "family-connect-f83f8",
+  storageBucket: "family-connect-f83f8.firebasestorage.app",
+  messagingSenderId: "248574645855",
+  appId: "1:248574645855:web:f3df98cad6712bdaddadea",
+  measurementId: "G-ZMYLT45H1M"
+};
+const ADMIN_UID = "5oK3JkNqEoXb1bfvrPDAqVNVre22";
+const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestore(app);
+const $ = id => document.getElementById(id);
+let currentProfile = null, stopMessages = null, stopMembers = null;
+function notice(text, bad=false){$("notice").textContent=text;$("notice").classList.remove("hidden");$("notice").style.background=bad?"#fdeaea":"#edf5f1";}
+function clearNotice(){$("notice").classList.add("hidden");}
+function show(view){["authView","pendingView","appView"].forEach(id=>$(id).classList.toggle("hidden",id!==view));}
+function cleanListeners(){if(stopMessages)stopMessages();if(stopMembers)stopMembers();stopMessages=stopMembers=null;}
+$("showRegister").onclick=()=>{$("registerBox").classList.toggle("hidden");};
+$("loginBtn").onclick=async()=>{try{clearNotice();await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);}catch(e){notice(friendly(e),true);}};
+$("registerBtn").onclick=async()=>{try{
+ clearNotice();const name=$("fullName").value.trim(),email=$("regEmail").value.trim(),password=$("regPassword").value;
+ if(!name)throw new Error("Enter your name.");if(password.length<6)throw new Error("Password must contain at least 6 characters.");
+ const cred=await createUserWithEmailAndPassword(auth,email,password);
+ await setDoc(doc(db,"profiles",cred.user.uid),{uid:cred.user.uid,name,email:cred.user.email,status:"pending",role:"member",createdAt:serverTimestamp()});
+ notice("Registration submitted. Waiting for administrator approval.");
+ routeProfile({uid:cred.user.uid,name,email,status:"pending",role:"member"});
+ }catch(e){notice(friendly(e),true);}};
+$("logoutBtn").onclick=()=>signOut(auth);
+$("pendingRefresh").onclick=async()=>{if(auth.currentUser){const s=await getDoc(doc(db,"profiles",auth.currentUser.uid));if(s.exists())routeProfile(s.data());}};
+function friendly(e){const m=e?.message||"Something went wrong.";return m.replace("Firebase: ","").replace(/\(auth\/[^)]+\)\.?/g,"").trim();}
+async function routeProfile(profile){
+ currentProfile=profile;$("logoutBtn").classList.remove("hidden");
+ if(profile.status!=="approved"){show("pendingView");$("pendingEmail").textContent=profile.email||"";return;}
+ show("appView");$("hello").textContent="Hello, "+(profile.name||"family member");
+ $("adminPanel").classList.toggle("hidden",auth.currentUser.uid!==ADMIN_UID);
+ startMessages();if(auth.currentUser.uid===ADMIN_UID)startMembers();
+}
+async function ensureProfile(user){
+ const ref=doc(db,"profiles",user.uid);let snap=await getDoc(ref);
+ if(!snap.exists() && user.uid===ADMIN_UID){
+  await setDoc(ref,{uid:user.uid,name:"Family Administrator",email:user.email,status:"approved",role:"admin",createdAt:serverTimestamp()});
+  snap=await getDoc(ref);
+ }
+ if(!snap.exists()){show("pendingView");$("pendingEmail").textContent=user.email||"";notice("Your profile is not set up. Contact the administrator.",true);return;}
+ routeProfile(snap.data());
+}
+onAuthStateChanged(auth,async user=>{
+ cleanListeners();clearNotice();
+ if(!user){currentProfile=null;$("logoutBtn").classList.add("hidden");show("authView");return;}
+ try{await ensureProfile(user);}catch(e){show("authView");notice(friendly(e),true);}
+});
+function startMessages(){
+ const q=query(collection(db,"familyMessages"),orderBy("createdAt","asc"),limit(200));
+ stopMessages=onSnapshot(q,snap=>{
+  const box=$("messages");box.innerHTML="";
+  snap.forEach(d=>{const m=d.data(),el=document.createElement("div");el.className="msg"+(m.uid===auth.currentUser.uid?" mine":"");
+   const meta=document.createElement("small");meta.textContent=(m.name||"Family member")+" · "+(m.createdAt?.toDate?m.createdAt.toDate().toLocaleString():"sending…");
+   const body=document.createElement("div");body.textContent=m.text||"";el.append(meta,body);box.append(el);});
+  box.scrollTop=box.scrollHeight;
+ },e=>notice("Could not load messages: "+friendly(e),true));
+}
+$("sendForm").onsubmit=async ev=>{ev.preventDefault();const text=$("messageInput").value.trim();if(!text||!currentProfile)return;
+ $("messageInput").value="";
+ try{await addDoc(collection(db,"familyMessages"),{uid:auth.currentUser.uid,name:currentProfile.name,text,createdAt:serverTimestamp()});}
+ catch(e){$("messageInput").value=text;notice("Message not sent: "+friendly(e),true);}
+};
+function startMembers(){
+ stopMembers=onSnapshot(query(collection(db,"profiles"),orderBy("createdAt","asc")),snap=>{
+  const box=$("memberList");box.innerHTML="";
+  snap.forEach(d=>{const p=d.data();if(p.uid===ADMIN_UID)return;
+   const row=document.createElement("div");row.className="user";
+   const info=document.createElement("div"),name=document.createElement("strong"),email=document.createElement("small"),state=document.createElement("span");
+   name.textContent=p.name||"Unnamed";email.textContent=p.email||"";state.className="pill";state.textContent=p.status||"unknown";info.append(name,email);
+   row.append(info,state);
+   if(p.status==="pending"){const b=document.createElement("button");b.textContent="Approve";b.onclick=async()=>{try{await updateDoc(doc(db,"profiles",p.uid),{status:"approved"});notice((p.name||"Member")+" approved.");}catch(e){notice(friendly(e),true);}};row.append(b);}
+   box.append(row);
+  });
+  if(!box.children.length)box.textContent="No family registrations yet.";
+ },e=>notice("Could not load members: "+friendly(e),true));
+}
+</script>
+</body>
+</html>
