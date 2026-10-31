@@ -95,8 +95,10 @@ $("registerBtn").onclick=async()=>{try{
  }catch(e){notice(friendly(e),true);}};
 $("logoutBtn").onclick=()=>signOut(auth);
 $("pendingRefresh").onclick=async()=>{if(auth.currentUser){const s=await getDoc(doc(db,"profiles",auth.currentUser.uid));if(s.exists())routeProfile(s.data());}};
-function friendly(e){const m=e?.message||"Something went wrong.";return m.replace("Firebase: ","").replace(/\(auth\/[^)]+\)\.?/g,"").trim();}
-async function routeProfile(profile){
+function friendly(e){
+  return (e?.message || "Something went wrong.") +
+    " [" + (e?.code || "unknown") + "]";
+}
  currentProfile=profile;$("logoutBtn").classList.remove("hidden");
  if(profile.status!=="approved"){show("pendingView");$("pendingEmail").textContent=profile.email||"";return;}
  show("appView");$("hello").textContent="Hello, "+(profile.name||"family member");
