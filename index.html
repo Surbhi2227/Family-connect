@@ -53,7 +53,17 @@ footer{text-align:center;color:#718079;font-size:12px;padding:20px}
 
 <section id="appView" class="hidden">
 <div class="card"><h2 id="hello">Family chat</h2><p class="muted">Messages are visible to approved Family Connect members.</p>
-<div id="messages" aria-live="polite"></div>
+<div class="card" id="profileCard">
+  <div class="row">
+    <div id="profileInitials" style="width:52px;height:52px;border-radius:50%;background:#174c45;color:white;display:grid;place-items:center;font-size:20px;font-weight:bold">?</div>
+    <div>
+      <strong id="profileName">Family member</strong><br>
+      <small id="profileEmail"></small><br>
+      <small id="profileStatus">Approved</small>
+    </div>
+  </div>
+</div>
+  <div id="messages" aria-live="polite"></div>
 <form id="sendForm" class="row"><input id="messageInput" maxlength="2000" placeholder="Write a message…" autocomplete="off" required><button type="submit">Send</button></form>
 </div>
 <div id="adminPanel" class="card hidden"><h2>Administrator · Member approvals</h2><p class="muted">Only the designated administrator can approve accounts.</p><div id="memberList">Loading members…</div></div>
@@ -101,7 +111,12 @@ function friendly(e){
 }
   function routeProfile(profile){
  currentProfile=profile;$("logoutBtn").classList.remove("hidden");
- if(profile.status!=="approved"){show("pendingView");$("pendingEmail").textContent=profile.email||"";return;}
+const profileName=profile.name||"Family member";
+$("profileName").textContent=profileName;
+$("profileEmail").textContent=profile.email||"";
+$("profileStatus").textContent=profile.status==="approved"?"Approved":"Pending approval";
+$("profileInitials").textContent=profileName.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join("").toUpperCase()||"?";
+    if(profile.status!=="approved"){show("pendingView");$("pendingEmail").textContent=profile.email||"";return;}
  show("appView");$("hello").textContent="Hello, "+(profile.name||"family member");
  $("adminPanel").classList.toggle("hidden",auth.currentUser.uid!==ADMIN_UID);
  startMessages();if(auth.currentUser.uid===ADMIN_UID)startMembers();
