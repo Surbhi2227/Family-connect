@@ -98,7 +98,7 @@ $("pendingRefresh").onclick=async()=>{if(auth.currentUser){const s=await getDoc(
 function friendly(e){
   return (e?.message || "Something went wrong.") +
     " [" + (e?.code || "unknown") + "]";
-  }
+}
  currentProfile=profile;$("logoutBtn").classList.remove("hidden");
  if(profile.status!=="approved"){show("pendingView");$("pendingEmail").textContent=profile.email||"";return;}
  show("appView");$("hello").textContent="Hello, "+(profile.name||"family member");
