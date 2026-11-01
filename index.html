@@ -63,6 +63,10 @@ footer{text-align:center;color:#718079;font-size:12px;padding:20px}
     </div>
   </div>
 </div>
+  <div class="card" id="familyDirectory">
+  <h2>Family Members</h2>
+  <div id="familyMembersList">Loading family members...</div>
+  </div>
   <div id="messages" aria-live="polite"></div>
 <form id="sendForm" class="row"><input id="messageInput" maxlength="2000" placeholder="Write a message…" autocomplete="off" required><button type="submit">Send</button></form>
 </div>
@@ -74,7 +78,7 @@ footer{text-align:center;color:#718079;font-size:12px;padding:20px}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDkGi21wce1cmxMxccIB1MjzQ3DofQ6HLc",
@@ -119,7 +123,7 @@ $("profileInitials").textContent=profileName.trim().split(/\s+/).slice(0,2).map(
     if(profile.status!=="approved"){show("pendingView");$("pendingEmail").textContent=profile.email||"";return;}
  show("appView");$("hello").textContent="Hello, "+(profile.name||"family member");
  $("adminPanel").classList.toggle("hidden",auth.currentUser.uid!==ADMIN_UID);
- startMessages();if(auth.currentUser.uid===ADMIN_UID)startMembers();
+ startMessages();startFamilyDirectory();if(auth.currentUser.uid===ADMIN_UID)startMembers();
 }
 async function ensureProfile(user){
  const ref=doc(db,"profiles",user.uid);let snap=await getDoc(ref);
@@ -150,7 +154,46 @@ $("sendForm").onsubmit=async ev=>{ev.preventDefault();const text=$("messageInput
  try{await addDoc(collection(db,"familyMessages"),{uid:auth.currentUser.uid,name:currentProfile.name,text,createdAt:serverTimestamp()});}
  catch(e){$("messageInput").value=text;notice("Message not sent: "+friendly(e),true);}
 };
-function startMembers(){
+function startFamilyDirectory(){
+  if(window.familyDirectoryStop)window.familyDirectoryStop();
+
+  const box=$("familyMembersList");
+  box.textContent="Loading family members...";
+
+  window.familyDirectoryStop=onSnapshot(
+    query(collection(db,"profiles"),where("status","==","approved")),
+    snap=>{
+      box.innerHTML="";
+      snap.forEach(d=>{
+        const p=d.data();
+        const card=document.createElement("div");
+        card.style.cssText="display:flex;align-items:center;gap:12px;padding:12px;margin:8px 0;background:#f3f6fa;border-radius:12px";
+
+        const avatar=document.createElement("div");
+        avatar.textContent=(p.name||"Family").trim().split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase();
+        avatar.style.cssText="width:44px;height:44px;border-radius:50%;background:#174c45;color:white;display:flex;align-items:center;justify-content:center;font-weight:bold";
+
+        const info=document.createElement("div");
+        const name=document.createElement("strong");
+        name.textContent=p.name||"Family member";
+
+        const email=document.createElement("div");
+        email.textContent=p.email||"";
+
+        const status=document.createElement("small");
+        status.textContent="Approved";
+
+        info.append(name,email,status);
+        card.append(avatar,info);
+        box.append(card);
+      });
+
+      if(!snap.size)box.textContent="No approved family members yet.";
+    },
+    e=>box.textContent="Could not load family members: "+friendly(e)
+  );
+}
+  function startMembers(){
  stopMembers=onSnapshot(query(collection(db,"profiles"),orderBy("createdAt","asc")),snap=>{
   const box=$("memberList");box.innerHTML="";
   snap.forEach(d=>{const p=d.data();if(p.uid===ADMIN_UID)return;
